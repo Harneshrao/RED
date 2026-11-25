@@ -1,0 +1,229 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.userId == userId &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.email is string && data.email.size() <= 200 &&
+        (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 500)) &&
+        data.preferredTheme in ['SYSTEM', 'LIGHT', 'DARK'] &&
+        data.scansCount is int && data.scansCount >= 0 && data.scansCount <= 100000;
+    }
+
+    function isValidScan(data, userId) {
+      return data.userId == userId &&
+        data.productBrand is string && data.productBrand.size() >= 1 && data.productBrand.size() <= 100 &&
+        data.productModel is string && data.productModel.size() >= 1 && data.productModel.size() <= 140 &&
+        data.category in ['Watches', 'Electronics', 'Appliances', 'Other'] &&
+        data.generationOrEra is string && data.generationOrEra.size() <= 100 &&
+        data.movementOrPowerType is string && data.movementOrPowerType.size() <= 100 &&
+        data.confidenceScore is number && data.confidenceScore >= 0.0 && data.confidenceScore <= 1.0 &&
+        data.confidenceLabel in ['HIGH', 'MEDIUM', 'LOW'] &&
+        data.damageNotes is string && data.damageNotes.size() <= 600 &&
+        data.missingComponentNotes is string && data.missingComponentNotes.size() <= 600 &&
+        data.needsAdditionalAngle is bool &&
+        data.suggestedNextAngle is string && data.suggestedNextAngle.size() <= 240 &&
+        data.dataVerificationStatus in ['VERIFIED_DATASET', 'AI_ILLUSTRATIVE'] &&
+        data.componentCount is int && data.componentCount >= 0 && data.componentCount <= 40;
+    }
+
+    function isValidScanComponent(data, userId, scanId) {
+      return data.userId == userId &&
+        data.scanId == scanId &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.categoryKey is string && data.categoryKey.size() >= 1 && data.categoryKey.size() <= 60 &&
+        data.alternativeNames is list && data.alternativeNames.size() <= 10 &&
+        (data.alternativeNames.size() == 0 || data.alternativeNames[0] is string) &&
+        data.primaryFunction is string && data.primaryFunction.size() >= 1 && data.primaryFunction.size() <= 400 &&
+        data.material is string && data.material.size() <= 120 &&
+        data.dimensions is string && data.dimensions.size() <= 120 &&
+        data.partNumber is string && data.partNumber.size() <= 80 &&
+        data.compatibilityStatus in ['VERIFIED_COMPATIBLE', 'LIKELY_COMPATIBLE', 'COMPATIBILITY_UNKNOWN', 'NOT_COMPATIBLE'] &&
+        data.compatibilityReason is string && data.compatibilityReason.size() <= 400 &&
+        data.replacementDifficulty in ['EASY', 'MODERATE', 'ADVANCED', 'PROFESSIONAL'] &&
+        data.visibleInPhoto is bool &&
+        data.hiddenInViewer is bool &&
+        data.layerOrder is int && data.layerOrder >= 0 && data.layerOrder <= 50;
+    }
+
+    function isValidSavedItem(data, userId) {
+      return data.userId == userId &&
+        data.itemType in ['PRODUCT', 'COMPONENT', 'REPLACEMENT_PART', 'REPAIR_PROJECT'] &&
+        data.referenceId is string && data.referenceId.size() >= 1 && data.referenceId.size() <= 128 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+        data.subtitle is string && data.subtitle.size() <= 240 &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 60 &&
+        data.compatibilityStatus in ['VERIFIED_COMPATIBLE', 'LIKELY_COMPATIBLE', 'COMPATIBILITY_UNKNOWN', 'NOT_COMPATIBLE'] &&
+        data.notes is string && data.notes.size() <= 500;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'email', 'preferredTheme', 'scansCount', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'photoUrl', 'preferredTheme', 'scansCount', 'createdAt', 'updatedAt']) &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       isValidUserProfile(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'photoUrl', 'preferredTheme', 'scansCount', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /scans/{scanId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(scanId);
+        allow list: if isOwner(userId) && isValidId(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(scanId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'productBrand', 'productModel', 'category',
+                           'generationOrEra', 'movementOrPowerType', 'confidenceScore',
+                           'confidenceLabel', 'damageNotes', 'missingComponentNotes',
+                           'needsAdditionalAngle', 'suggestedNextAngle',
+                           'dataVerificationStatus', 'componentCount', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'productBrand', 'productModel', 'category',
+                           'generationOrEra', 'movementOrPowerType', 'confidenceScore',
+                           'confidenceLabel', 'damageNotes', 'missingComponentNotes',
+                           'needsAdditionalAngle', 'suggestedNextAngle',
+                           'dataVerificationStatus', 'componentCount', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidScan(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(scanId) &&
+                         isValidScan(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'productBrand', 'productModel', 'damageNotes',
+                           'missingComponentNotes', 'needsAdditionalAngle',
+                           'suggestedNextAngle', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(scanId);
+
+        match /components/{componentId} {
+          allow get: if isOwner(userId) && isValidId(userId) && isValidId(scanId) && isValidId(componentId);
+          allow list: if isOwner(userId) && isValidId(userId) && isValidId(scanId);
+
+          allow create: if isOwner(userId) &&
+                           isValidId(userId) &&
+                           isValidId(scanId) &&
+                           isValidId(componentId) &&
+                           incoming().keys().hasAll([
+                             'userId', 'scanId', 'name', 'categoryKey', 'alternativeNames',
+                             'primaryFunction', 'material', 'dimensions', 'partNumber',
+                             'compatibilityStatus', 'compatibilityReason', 'replacementDifficulty',
+                             'visibleInPhoto', 'hiddenInViewer', 'layerOrder', 'createdAt', 'updatedAt'
+                           ]) &&
+                           incoming().keys().hasOnly([
+                             'userId', 'scanId', 'name', 'categoryKey', 'alternativeNames',
+                             'primaryFunction', 'material', 'dimensions', 'partNumber',
+                             'compatibilityStatus', 'compatibilityReason', 'replacementDifficulty',
+                             'visibleInPhoto', 'hiddenInViewer', 'layerOrder', 'createdAt', 'updatedAt'
+                           ]) &&
+                           isValidTimestamp(incoming().createdAt) &&
+                           isValidTimestamp(incoming().updatedAt) &&
+                           isValidScanComponent(incoming(), userId, scanId) &&
+                           (
+                             exists(/databases/$(database)/documents/users/$(userId)/scans/$(scanId)) ||
+                             existsAfter(/databases/$(database)/documents/users/$(userId)/scans/$(scanId))
+                           );
+
+          allow update: if isOwner(userId) &&
+                           isValidId(userId) &&
+                           isValidId(scanId) &&
+                           isValidId(componentId) &&
+                           isValidScanComponent(incoming(), userId, scanId) &&
+                           incoming().userId == existing().userId &&
+                           incoming().scanId == existing().scanId &&
+                           incoming().createdAt == existing().createdAt &&
+                           isValidTimestamp(incoming().updatedAt) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'hiddenInViewer', 'dimensions', 'compatibilityStatus',
+                             'compatibilityReason', 'updatedAt'
+                           ]);
+
+          allow delete: if isOwner(userId) && isValidId(userId) && isValidId(scanId) && isValidId(componentId);
+        }
+      }
+
+      match /savedItems/{savedId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(savedId);
+        allow list: if isOwner(userId) && isValidId(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(savedId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'itemType', 'referenceId', 'title', 'subtitle',
+                           'category', 'compatibilityStatus', 'notes', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'itemType', 'referenceId', 'title', 'subtitle',
+                           'category', 'compatibilityStatus', 'notes', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidSavedItem(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(savedId) &&
+                         isValidSavedItem(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['notes', 'title', 'subtitle', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(savedId);
+      }
+    }
+  }
+}

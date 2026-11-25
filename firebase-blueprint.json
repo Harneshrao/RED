@@ -1,0 +1,187 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile and app settings isolated per user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID matching the document ID."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name."
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address (PII, strictly owner-only)."
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "Optional profile avatar URL."
+        },
+        "preferredTheme": {
+          "type": "string",
+          "enum": ["SYSTEM", "LIGHT", "DARK"],
+          "description": "User theme preference."
+        },
+        "scansCount": {
+          "type": "integer",
+          "description": "Total completed product scans."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp updated via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["userId", "displayName", "email", "preferredTheme", "scansCount", "createdAt", "updatedAt"]
+    },
+    "Scan": {
+      "title": "Scan",
+      "description": "AI-identified physical product scan record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "productBrand": { "type": "string" },
+        "productModel": { "type": "string" },
+        "category": { "type": "string", "enum": ["Watches", "Electronics", "Appliances", "Other"] },
+        "generationOrEra": { "type": "string" },
+        "movementOrPowerType": { "type": "string" },
+        "confidenceScore": { "type": "number" },
+        "confidenceLabel": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "damageNotes": { "type": "string" },
+        "missingComponentNotes": { "type": "string" },
+        "needsAdditionalAngle": { "type": "boolean" },
+        "suggestedNextAngle": { "type": "string" },
+        "dataVerificationStatus": { "type": "string", "enum": ["VERIFIED_DATASET", "AI_ILLUSTRATIVE"] },
+        "componentCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "productBrand",
+        "productModel",
+        "category",
+        "generationOrEra",
+        "movementOrPowerType",
+        "confidenceScore",
+        "confidenceLabel",
+        "damageNotes",
+        "missingComponentNotes",
+        "needsAdditionalAngle",
+        "suggestedNextAngle",
+        "dataVerificationStatus",
+        "componentCount",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ScanComponent": {
+      "title": "ScanComponent",
+      "description": "Individual component belonging to a scanned product assembly.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "scanId": { "type": "string" },
+        "name": { "type": "string" },
+        "categoryKey": { "type": "string" },
+        "alternativeNames": { "type": "array" },
+        "primaryFunction": { "type": "string" },
+        "material": { "type": "string" },
+        "dimensions": { "type": "string" },
+        "partNumber": { "type": "string" },
+        "compatibilityStatus": {
+          "type": "string",
+          "enum": ["VERIFIED_COMPATIBLE", "LIKELY_COMPATIBLE", "COMPATIBILITY_UNKNOWN", "NOT_COMPATIBLE"]
+        },
+        "compatibilityReason": { "type": "string" },
+        "replacementDifficulty": {
+          "type": "string",
+          "enum": ["EASY", "MODERATE", "ADVANCED", "PROFESSIONAL"]
+        },
+        "visibleInPhoto": { "type": "boolean" },
+        "hiddenInViewer": { "type": "boolean" },
+        "layerOrder": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "scanId",
+        "name",
+        "categoryKey",
+        "alternativeNames",
+        "primaryFunction",
+        "material",
+        "dimensions",
+        "partNumber",
+        "compatibilityStatus",
+        "compatibilityReason",
+        "replacementDifficulty",
+        "visibleInPhoto",
+        "hiddenInViewer",
+        "layerOrder",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SavedItem": {
+      "title": "SavedItem",
+      "description": "Bookmarked product, component, replacement spec, or repair project.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "itemType": { "type": "string", "enum": ["PRODUCT", "COMPONENT", "REPLACEMENT_PART", "REPAIR_PROJECT"] },
+        "referenceId": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "category": { "type": "string" },
+        "compatibilityStatus": {
+          "type": "string",
+          "enum": ["VERIFIED_COMPATIBLE", "LIKELY_COMPATIBLE", "COMPATIBILITY_UNKNOWN", "NOT_COMPATIBLE"]
+        },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "itemType",
+        "referenceId",
+        "title",
+        "subtitle",
+        "category",
+        "compatibilityStatus",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-only user profile and preferences."
+    },
+    "/users/{userId}/scans/{scanId}": {
+      "schema": { "$ref": "#/entities/Scan" },
+      "description": "Owner-only product identification scans."
+    },
+    "/users/{userId}/scans/{scanId}/components/{componentId}": {
+      "schema": { "$ref": "#/entities/ScanComponent" },
+      "description": "Detected and verified components under a scan."
+    },
+    "/users/{userId}/savedItems/{savedId}": {
+      "schema": { "$ref": "#/entities/SavedItem" },
+      "description": "Saved library items for products, components, parts, and repair projects."
+    }
+  }
+}
